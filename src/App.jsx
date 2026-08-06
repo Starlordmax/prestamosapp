@@ -129,8 +129,38 @@ export default function App() {
   const [botMessages, setBotMessages] = useState([
     { role: "bot", text: "Hola. Preguntame por cartera, cordobas, dolares, atrasados, cobros de hoy, clientes o mayor deuda." }
   ]);
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginCode, setLoginCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session) {
+      setClients([]);
+      setLoans([]);
+      setPayments([]);
+      setCuotas([]);
+      setLoading(false);
+      return undefined;
+    }
     refreshAll();
     const channel = supabase
       .channel("loan-dashboard-db")
@@ -140,7 +170,26 @@ export default function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "prestamo_cuota__c" }, refreshAll)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [session?.access_token]);
+
+  useEffect(() => {
+    if (!session) return undefined;
+    const events = ["click", "keydown", "mousemove", "scroll", "touchstart"];
+    let timer;
+    const resetTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        await supabase.auth.signOut();
+        showToast("Sesion cerrada por inactividad.", "error");
+      }, 60 * 60 * 1000);
+    };
+    events.forEach(eventName => window.addEventListener(eventName, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      clearTimeout(timer);
+      events.forEach(eventName => window.removeEventListener(eventName, resetTimer));
+    };
+  }, [session?.access_token]);
 
   async function refreshAll() {
     setLoading(true);
@@ -217,6 +266,45 @@ export default function App() {
   function showToast(message, kind = "success") {
     setToast({ message, kind });
     setTimeout(() => setToast(null), 3200);
+  }
+
+  async function sendLoginCode(e) {
+    e.preventDefault();
+    const email = loginEmail.trim().toLowerCase();
+    if (!email) return;
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false
+      }
+    });
+    setAuthLoading(false);
+    if (error) return showToast(error.message, "error");
+    setCodeSent(true);
+    showToast("Codigo enviado. Revisa tu correo.");
+  }
+
+  async function verifyLoginCode(e) {
+    e.preventDefault();
+    const email = loginEmail.trim().toLowerCase();
+    const token = loginCode.trim();
+    if (!email || token.length < 6) return;
+    setAuthLoading(true);
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "email"
+    });
+    setAuthLoading(false);
+    if (error) return showToast(error.message, "error");
+    setLoginCode("");
+    showToast("Sesion iniciada.");
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    showToast("Sesion cerrada.");
   }
 
   function changeSort(field) {
@@ -409,6 +497,62 @@ export default function App() {
 
   const selectedDayItems = cuotas.filter(c => c.fecha_cobro__c === selectedDay && c.estado__c !== "Pagada");
 
+  if (authLoading && !session) {
+    return <AuthShell><div className="auth-card"><div className="loading auth-loading">Verificando sesion...</div></div></AuthShell>;
+  }
+
+  if (!session) {
+    return (
+      <AuthShell>
+        {toast && <div className={`toast ${toast.kind}`}>{toast.message}</div>}
+        <section className="auth-card">
+          <div className="auth-mark">P</div>
+          <div className="eyebrow">Acceso seguro</div>
+          <h1>Prestamos</h1>
+          <p>Ingresa con un codigo de un solo uso enviado a tu correo.</p>
+
+          <form className="form auth-form" onSubmit={codeSent ? verifyLoginCode : sendLoginCode}>
+            <label>
+              Correo autorizado
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={e => setLoginEmail(e.target.value)}
+                placeholder="tu-correo@empresa.com"
+                autoComplete="email"
+                required
+              />
+            </label>
+
+            {codeSent && (
+              <label>
+                Codigo de 6 digitos
+                <input
+                  value={loginCode}
+                  onChange={e => setLoginCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="123456"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  required
+                />
+              </label>
+            )}
+
+            <button className="btn primary wide" disabled={authLoading}>
+              {authLoading ? "Procesando..." : codeSent ? "Verificar codigo" : "Enviar codigo"}
+            </button>
+          </form>
+
+          {codeSent && (
+            <button className="link-button" onClick={() => { setCodeSent(false); setLoginCode(""); }}>
+              Cambiar correo
+            </button>
+          )}
+        </section>
+      </AuthShell>
+    );
+  }
+
   return (
     <div className="shell">
       {toast && <div className={`toast ${toast.kind}`}>{toast.message}</div>}
@@ -419,10 +563,12 @@ export default function App() {
           <p>Clientes, cartera, pagos y calendario conectados a Supabase.</p>
         </div>
         <div className="top-actions">
+          <span className="user-badge">{session.user.email}</span>
           <button onClick={refreshAll} className="icon-btn">Actualizar</button>
           <button onClick={() => setClientModal(true)} className="btn ghost">Cliente</button>
           <button onClick={() => setLoanModal(true)} className="btn primary">Nuevo prestamo</button>
           <button onClick={() => openPayment()} className="btn">Agregar pago</button>
+          <button onClick={signOut} className="btn danger">Salir</button>
         </div>
       </header>
 
@@ -581,6 +727,21 @@ export default function App() {
       {loanModal && <Modal title="Crear prestamo" onClose={() => setLoanModal(false)}><LoanForm form={loanForm} setForm={setLoanForm} clients={clients} onSubmit={createLoan} selectedClientId={selectedClientId} /></Modal>}
       {payModal && <Modal title="Agregar pago" onClose={() => setPayModal(false)}><PaymentForm form={payForm} setForm={setPayForm} loans={loans.filter(l => l.estado__c !== "Pagado")} onSubmit={createPayment} /></Modal>}
     </div>
+  );
+}
+
+function AuthShell({ children }) {
+  return (
+    <main className="auth-shell">
+      <div className="auth-bg-panel">
+        <div className="auth-copy">
+          <div className="eyebrow">Pangea loans</div>
+          <h1>Control de cartera con acceso protegido</h1>
+          <p>Clientes, pagos, vencimientos y asistente de consultas en una sola vista.</p>
+        </div>
+      </div>
+      {children}
+    </main>
   );
 }
 

@@ -8,6 +8,8 @@ Website React + Supabase que replica las funciones principales del LWC `loanDash
 - Calendario de cuotas
 - Bot local de consultas
 - Dashboard responsive para telefono y desktop
+- Acceso por codigo enviado al correo con Supabase Auth
+- Cierre automatico de sesion tras 1 hora de inactividad
 
 ## Ejecutar
 
@@ -49,4 +51,65 @@ Variables incluidas en `render.yaml`:
 
 ## Seguridad
 
-Las tablas estan actualmente con RLS apagado para que la app pueda funcionar directo con la publishable key. Para produccion conviene agregar login, activar RLS y crear policies.
+La app requiere una sesion Supabase Auth. El codigo usa `shouldCreateUser: false`, asi que primero debes crear los correos autorizados en Supabase:
+
+1. Supabase Dashboard > Authentication > Users.
+2. Add user.
+3. Usa el correo autorizado.
+4. Marca el correo como confirmado si Supabase lo solicita.
+
+Para que el correo muestre un codigo de 6 digitos, revisa:
+
+1. Supabase Dashboard > Authentication > Email Templates.
+2. Abre la plantilla de Magic Link / OTP.
+3. Asegurate de incluir `{{ .Token }}` en el cuerpo del correo.
+
+SQL recomendado para activar RLS cuando estes listo:
+
+```sql
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+alter table public.clientes__c enable row level security;
+alter table public.prestamo__c enable row level security;
+alter table public.prestamo_movimiento__c enable row level security;
+alter table public.prestamo_cuota__c enable row level security;
+
+create policy "Authenticated users can manage clientes"
+on public.clientes__c
+for all
+to authenticated
+using (true)
+with check (true);
+
+create policy "Authenticated users can manage prestamos"
+on public.prestamo__c
+for all
+to authenticated
+using (true)
+with check (true);
+
+create policy "Authenticated users can manage movimientos"
+on public.prestamo_movimiento__c
+for all
+to authenticated
+using (true)
+with check (true);
+
+create policy "Authenticated users can manage cuotas"
+on public.prestamo_cuota__c
+for all
+to authenticated
+using (true)
+with check (true);
+```
+
+Nota: esta politica permite que cualquier usuario autenticado autorizado en Supabase maneje toda la cartera. Si necesitas permisos por usuario/rol, agrega columnas de ownership/roles antes de activar politicas mas finas.
