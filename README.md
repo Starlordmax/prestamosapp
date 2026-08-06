@@ -8,7 +8,7 @@ Website React + Supabase que replica las funciones principales del LWC `loanDash
 - Calendario de cuotas
 - Bot local de consultas
 - Dashboard responsive para telefono y desktop
-- Acceso por codigo enviado al correo con Supabase Auth
+- Acceso por correo y contrasena con Supabase Auth
 - Cierre automatico de sesion tras 1 hora de inactividad
 
 ## Ejecutar
@@ -51,18 +51,13 @@ Variables incluidas en `render.yaml`:
 
 ## Seguridad
 
-La app requiere una sesion Supabase Auth. El codigo usa `shouldCreateUser: false`, asi que primero debes crear los correos autorizados en Supabase:
+La app requiere una sesion Supabase Auth con correo y contrasena. Primero debes crear los usuarios autorizados en Supabase:
 
 1. Supabase Dashboard > Authentication > Users.
 2. Add user.
 3. Usa el correo autorizado.
-4. Marca el correo como confirmado si Supabase lo solicita.
-
-Para que el correo muestre un codigo de 6 digitos, revisa:
-
-1. Supabase Dashboard > Authentication > Email Templates.
-2. Abre la plantilla de Magic Link / OTP.
-3. Asegurate de incluir `{{ .Token }}` en el cuerpo del correo.
+4. Escribe la contrasena que usara ese usuario.
+5. Marca el correo como confirmado si Supabase lo solicita.
 
 SQL recomendado para activar RLS cuando estes listo:
 

@@ -132,8 +132,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginEmail, setLoginEmail] = useState("");
-  const [loginCode, setLoginCode] = useState("");
-  const [codeSent, setCodeSent] = useState(false);
+  const [loginPassword, setLoginPassword] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -268,37 +267,19 @@ export default function App() {
     setTimeout(() => setToast(null), 3200);
   }
 
-  async function sendLoginCode(e) {
+  async function signInWithPassword(e) {
     e.preventDefault();
     const email = loginEmail.trim().toLowerCase();
-    if (!email) return;
+    const password = loginPassword;
+    if (!email || !password) return;
     setAuthLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
-      options: {
-        shouldCreateUser: false
-      }
+      password
     });
     setAuthLoading(false);
     if (error) return showToast(error.message, "error");
-    setCodeSent(true);
-    showToast("Codigo enviado. Revisa tu correo.");
-  }
-
-  async function verifyLoginCode(e) {
-    e.preventDefault();
-    const email = loginEmail.trim().toLowerCase();
-    const token = loginCode.trim();
-    if (!email || token.length < 6) return;
-    setAuthLoading(true);
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: "email"
-    });
-    setAuthLoading(false);
-    if (error) return showToast(error.message, "error");
-    setLoginCode("");
+    setLoginPassword("");
     showToast("Sesion iniciada.");
   }
 
@@ -509,11 +490,11 @@ export default function App() {
           <div className="auth-mark">P</div>
           <div className="eyebrow">Acceso seguro</div>
           <h1>Prestamos</h1>
-          <p>Ingresa con un codigo de un solo uso enviado a tu correo.</p>
+          <p>Ingresa con el correo y la contrasena configurados en Supabase.</p>
 
-          <form className="form auth-form" onSubmit={codeSent ? verifyLoginCode : sendLoginCode}>
+          <form className="form auth-form" onSubmit={signInWithPassword}>
             <label>
-              Correo autorizado
+              Correo
               <input
                 type="email"
                 value={loginEmail}
@@ -524,30 +505,22 @@ export default function App() {
               />
             </label>
 
-            {codeSent && (
-              <label>
-                Codigo de 6 digitos
-                <input
-                  value={loginCode}
-                  onChange={e => setLoginCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="123456"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  required
-                />
-              </label>
-            )}
+            <label>
+              Contrasena
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={e => setLoginPassword(e.target.value)}
+                placeholder="Tu contrasena"
+                autoComplete="current-password"
+                required
+              />
+            </label>
 
             <button className="btn primary wide" disabled={authLoading}>
-              {authLoading ? "Procesando..." : codeSent ? "Verificar codigo" : "Enviar codigo"}
+              {authLoading ? "Procesando..." : "Entrar"}
             </button>
           </form>
-
-          {codeSent && (
-            <button className="link-button" onClick={() => { setCodeSent(false); setLoginCode(""); }}>
-              Cambiar correo
-            </button>
-          )}
         </section>
       </AuthShell>
     );
