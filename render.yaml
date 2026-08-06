@@ -1,0 +1,20 @@
+services:
+  - type: web
+    runtime: static
+    name: app-para-prestamos
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: true
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+    envVars:
+      - key: VITE_SUPABASE_URL
+        value: https://wowogbyyxxbpnycveegg.supabase.co
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_51yHFKmQJXcye9JwIWBuKA_zNiI93XH
